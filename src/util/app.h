@@ -5,6 +5,10 @@
 
 class Config;
 
+/**
+ * 定义一个应用。子类需要实现usage, welcome, run等方法，以便应用可以
+ * 正常启动
+ */
 class Application{
 public:
 	Application(){};
@@ -18,6 +22,7 @@ public:
 
 protected:
 	struct AppArgs{
+	    // 是否以后台程序运行
 		bool is_daemon;
 		std::string pidfile;
 		std::string conf_file;

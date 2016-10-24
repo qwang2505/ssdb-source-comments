@@ -18,28 +18,33 @@ void Response::add(int s){
 	add((int64_t)s);
 }
 
+// 在返回结果中加一个数字。PRId64用于跨平台格式化数据
 void Response::add(int64_t s){
 	char buf[20];
 	sprintf(buf, "%" PRId64 "", s);
 	resp.push_back(buf);
 }
 
+// 添加一个unsigned 64 int
 void Response::add(uint64_t s){
 	char buf[20];
 	sprintf(buf, "%" PRIu64 "", s);
 	resp.push_back(buf);
 }
 
+// 添加一个double
 void Response::add(double s){
 	char buf[30];
 	snprintf(buf, sizeof(buf), "%f", s);
 	resp.push_back(buf);
 }
 
+// 添加一个string到返回结果
 void Response::add(const std::string &s){
 	resp.push_back(s);
 }
 
+// 添加返回结果的状态
 void Response::reply_status(int status, const char *errmsg){
 	if(status == -1){
 		resp.push_back("error");
@@ -51,6 +56,7 @@ void Response::reply_status(int status, const char *errmsg){
 	}
 }
 
+// 返回bool结果
 void Response::reply_bool(int status, const char *errmsg){
 	if(status == -1){
 		resp.push_back("error");
@@ -66,6 +72,7 @@ void Response::reply_bool(int status, const char *errmsg){
 	}
 }
 
+// 返回int结果
 void Response::reply_int(int status, int64_t val){
 	if(status == -1){
 		resp.push_back("error");
@@ -75,6 +82,7 @@ void Response::reply_int(int status, int64_t val){
 	}
 }
 
+// 返回get的结果，结果中是字符串
 void Response::reply_get(int status, const std::string *val, const char *errmsg){
 	if(status == -1){
 		resp.push_back("error");
@@ -92,6 +100,7 @@ void Response::reply_get(int status, const std::string *val, const char *errmsg)
 	}
 } 
 
+// 返回list内容，list的每个内容是string
 void Response::reply_list(int status, const std::vector<std::string> &list){
 	if(status == -1){
 		resp.push_back("error");

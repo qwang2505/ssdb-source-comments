@@ -5,6 +5,7 @@ found in the LICENSE file.
 */
 #include "fde.h"
 
+// 根据文件描述符获取事件？不理解这里在干什么，更像是一个初始化事件列表的过程
 struct Fdevent* Fdevents::get_fde(int fd){
 	while((int)events.size() <= fd){
 		struct Fdevent *fde = new Fdevent();

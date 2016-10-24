@@ -11,9 +11,11 @@ found in the LICENSE file.
 #include <string>
 #include <vector>
 
+// 定义命令的返回结果
 class Response
 {
 public:
+    // 这里是实际上的返回结果
 	std::vector<std::string> resp;
 
 	int size() const;

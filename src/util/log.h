@@ -52,6 +52,7 @@ class Logger{
 		pthread_mutex_t *mutex;
 
 		uint64_t rotate_size_;
+		// 这个是记录什么的？
 		struct{
 			uint64_t w_curr;
 			uint64_t w_total;

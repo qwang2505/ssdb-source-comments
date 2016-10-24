@@ -12,6 +12,7 @@ found in the LICENSE file.
 	#define HAVE_EPOLL 1
 #endif
 
+// 这里定义的是事件类型？
 #define FDEVENT_NONE	(0)
 #define FDEVENT_IN		(1<<0)
 #define FDEVENT_PRI		(1<<1)
@@ -39,17 +40,22 @@ struct Fdevent{
 
 class Fdevents{
 	public:
+	    // 事件列表，存储的是事件结构体的指针
 		typedef std::vector<struct Fdevent *> events_t;
 	private:
 #ifdef HAVE_EPOLL
+        // 最多文件描述符数量
 		static const int MAX_FDS = 8 * 1024;
 		int ep_fd;
+		// epoll事件数组，用于从epoll接受已经就绪的事件
 		struct epoll_event ep_events[MAX_FDS];
 #else
 		int maxfd;
+		// fd_set是什么鬼
 		fd_set readset;
 		fd_set writeset;
 #endif
+        // 这两个分别是干什么的？
 		events_t events;
 		events_t ready_events;
 

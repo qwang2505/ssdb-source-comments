@@ -20,9 +20,12 @@ class NetworkServer;
 
 #define DEF_PROC(f) int proc_##f(NetworkServer *net, Link *link, const Request &req, Response *resp)
 
+// Request就是个Bytes数组
 typedef std::vector<Bytes> Request;
+// 处理函数
 typedef int (*proc_t)(NetworkServer *net, Link *link, const Request &req, Response *resp);
 
+// 定义一个命令
 struct Command{
 	static const int FLAG_READ		= (1 << 0);
 	static const int FLAG_WRITE		= (1 << 1);
@@ -45,6 +48,7 @@ struct Command{
 	}
 };
 
+// 一个处理请求的job
 struct ProcJob{
 	int result;
 	NetworkServer *serv;
@@ -82,6 +86,7 @@ struct BytesHash{
 };
 
 
+// proc_map_t貌似时隔字符串到command指针的影射，看用法在具体了解
 #define GCC_VERSION (__GNUC__ * 100 + __GNUC_MINOR__)
 #if GCC_VERSION >= 403
 	#include <tr1/unordered_map>
@@ -97,9 +102,11 @@ struct BytesHash{
 #endif
 
 
+// 定义请求处理的映射关系，管理命令的处理函数
 class ProcMap
 {
 private:
+    // 具体的命令映射
 	proc_map_t proc_map;
 
 public:
@@ -121,6 +128,7 @@ public:
 
 #include "../util/strings.h"
 
+// 持久化请求，需要看在哪里用到
 template<class T>
 static std::string serialize_req(T &req){
 	std::string ret;

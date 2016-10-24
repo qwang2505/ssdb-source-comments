@@ -15,6 +15,7 @@ found in the LICENSE file.
 #include <queue>
 #include <vector>
 
+// 对线程锁的封装
 class Mutex{
 	private:
 		pthread_mutex_t mutex;
@@ -33,6 +34,7 @@ class Mutex{
 		}
 };
 
+// 这也是锁，不知道在哪里用到，用到再具体看
 class Locking{
 	private:
 		Mutex *mutex;
@@ -70,10 +72,12 @@ class Semaphore {
 */
 
 
+// 线程安全的队列
 // Thread safe queue
 template <class T>
 class Queue{
 	private:
+	    // 这里为什么要用条件？不能直接使用锁来控制？
 		pthread_cond_t cond;
 		pthread_mutex_t mutex;
 		std::queue<T> items;
@@ -90,6 +94,9 @@ class Queue{
 
 
 // Selectable queue, multi writers, single reader
+// 为什么是多个写？写之前有加锁，同样不可以多个写吧？
+// 和Queue有什么区别？都是线程安全的，只不过Queue用cond
+// 来进行控制，SelectableQueue用管道来控制
 template <class T>
 class SelectableQueue{
 	private:
@@ -160,16 +167,20 @@ class WorkerPool{
 
 template <class T>
 Queue<T>::Queue(){
+    // 初始化线程等待条件
 	pthread_cond_init(&cond, NULL);
+	// 初始化线程锁
 	pthread_mutex_init(&mutex, NULL);
 }
 
 template <class T>
 Queue<T>::~Queue(){
+    // 销毁资源
 	pthread_cond_destroy(&cond);
 	pthread_mutex_destroy(&mutex);
 }
 
+// 判断队列是否空
 template <class T>
 bool Queue<T>::empty(){
 	bool ret = false;
@@ -181,6 +192,7 @@ bool Queue<T>::empty(){
 	return ret;
 }
 
+// 获取队列长度
 template <class T>
 int Queue<T>::size(){
 	int ret = -1;
@@ -192,8 +204,10 @@ int Queue<T>::size(){
 	return ret;
 }
 
+// 向队列添加一个item
 template <class T>
 int Queue<T>::push(const T item){
+    // 为什么这里不等待cond？
 	if(pthread_mutex_lock(&mutex) != 0){
 		return -1;
 	}
@@ -201,10 +215,12 @@ int Queue<T>::push(const T item){
 		items.push(item);
 	}
 	pthread_mutex_unlock(&mutex);
+	// 发送condition signal
 	pthread_cond_signal(&cond);
 	return 1;
 }
 
+// 从队列获取内容。如果队列为空，会等待cond发生再去获取内容
 template <class T>
 int Queue<T>::pop(T *data){
 	if(pthread_mutex_lock(&mutex) != 0){
@@ -214,6 +230,7 @@ int Queue<T>::pop(T *data){
 		// 必须放在循环中, 因为 pthread_cond_wait 可能抢不到锁而被其它处理了
 		while(items.empty()){
 			//fprintf(stderr, "%d wait\n", pthread_self());
+			//这里在wait的时候会解锁，这样别的线程就可以访问以及修改数据了
 			if(pthread_cond_wait(&cond, &mutex) != 0){
 				//fprintf(stderr, "%s %d -1!\n", __FILE__, __LINE__);
 				return -1;
@@ -235,14 +252,18 @@ int Queue<T>::pop(T *data){
 
 template <class T>
 SelectableQueue<T>::SelectableQueue(){
+    // 创建文件描述符
+    // 建立管道，0读取，1写入
 	if(pipe(fds) == -1){
 		exit(0);
 	}
+	// 初始化锁
 	pthread_mutex_init(&mutex, NULL);
 }
 
 template <class T>
 SelectableQueue<T>::~SelectableQueue(){
+    // 删除锁，关闭文件描述符
 	pthread_mutex_destroy(&mutex);
 	close(fds[0]);
 	close(fds[1]);
@@ -256,6 +277,7 @@ int SelectableQueue<T>::push(const T item){
 	{
 		items.push(item);
 	}
+	// 向文件描述符写数据
 	if(::write(fds[1], "1", 1) == -1){
 		exit(0);
 	}
@@ -269,6 +291,7 @@ int SelectableQueue<T>::pop(T *data){
 	char buf[1];
 
 	while(1){
+	    // 读文件描述符，如果没有数据，将等待
 		n = ::read(fds[0], buf, 1);
 		if(n < 0){
 			if(errno == EINTR){
@@ -279,6 +302,7 @@ int SelectableQueue<T>::pop(T *data){
 		}else if(n == 0){
 			ret = -1;
 		}else{
+		    // 加锁
 			if(pthread_mutex_lock(&mutex) != 0){
 				return -1;
 			}

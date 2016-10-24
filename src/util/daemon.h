@@ -6,6 +6,7 @@ found in the LICENSE file.
 #ifndef UTIL_DAEMON_H
 #define UTIL_DAEMON_H
 
+// 后面需要着重看一下这一部分
 int daemonize(const char *dir=NULL){
 	switch(fork()){
 		case -1:

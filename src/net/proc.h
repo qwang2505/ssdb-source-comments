@@ -18,15 +18,17 @@ class NetworkServer;
 #define PROC_THREAD     1
 #define PROC_BACKEND	100
 
+// 定义命令处理函数的宏
 #define DEF_PROC(f) int proc_##f(NetworkServer *net, Link *link, const Request &req, Response *resp)
 
 // Request就是个Bytes数组
 typedef std::vector<Bytes> Request;
-// 处理函数
+// 请求处理函数
 typedef int (*proc_t)(NetworkServer *net, Link *link, const Request &req, Response *resp);
 
 // 定义一个命令
 struct Command{
+    // flag表示这个命令是个什么类型的命令
 	static const int FLAG_READ		= (1 << 0);
 	static const int FLAG_WRITE		= (1 << 1);
 	static const int FLAG_BACKEND	= (1 << 2);
@@ -34,6 +36,7 @@ struct Command{
 
 	std::string name;
 	int flags;
+	// 处理此命令的函数
 	proc_t proc;
 	uint64_t calls;
 	double time_wait;
@@ -51,8 +54,11 @@ struct Command{
 // 一个处理请求的job
 struct ProcJob{
 	int result;
+	// 网络服务器
 	NetworkServer *serv;
+	// 网络链接？
 	Link *link;
+	// 处理请求的命令
 	Command *cmd;
 	double stime;
 	double time_wait;
@@ -70,11 +76,13 @@ struct ProcJob{
 };
 
 
+// 判定两个byte是否相等，为啥要定义成结构体呢？
 struct BytesEqual{
 	bool operator()(const Bytes &s1, const Bytes &s2) const {
 		return (bool)(s1.compare(s2) == 0);
 	}
 };
+// 求字符串的哈希值
 struct BytesHash{
 	size_t operator()(const Bytes &s1) const {
 		unsigned long __h = 0;
@@ -86,7 +94,7 @@ struct BytesHash{
 };
 
 
-// proc_map_t貌似时隔字符串到command指针的影射，看用法在具体了解
+// proc_map_t貌似是个字符串到command指针的影射，看用法在具体了解
 #define GCC_VERSION (__GNUC__ * 100 + __GNUC_MINOR__)
 #if GCC_VERSION >= 403
 	#include <tr1/unordered_map>
@@ -112,10 +120,13 @@ private:
 public:
 	ProcMap();
 	~ProcMap();
+	// 设置某个命令的处理函数，这里应该会根据flag来设置
 	void set_proc(const std::string &cmd, const char *sflags, proc_t proc);
+	// 设置命令的处理函数
 	void set_proc(const std::string &cmd, proc_t proc);
 	Command* get_proc(const Bytes &str);
 	
+	// 迭代器来获取所有命令
 	proc_map_t::iterator begin(){
 		return proc_map.begin();
 	}

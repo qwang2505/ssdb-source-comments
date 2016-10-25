@@ -97,6 +97,7 @@ class Queue{
 // 为什么是多个写？写之前有加锁，同样不可以多个写吧？
 // 和Queue有什么区别？都是线程安全的，只不过Queue用cond
 // 来进行控制，SelectableQueue用管道来控制
+// NOTICE 注意模板类的用法，要熟悉，且以后需要自己写模板类
 template <class T>
 class SelectableQueue{
 	private:
@@ -116,6 +117,21 @@ class SelectableQueue{
 		int pop(T *data);
 };
 
+/**
+ * 工作池？其中可以包含很多worker，应该是这样吧
+ * 两个模板类，W是worker类，JOB是任务类
+ *
+ * 这是个多线程的运行某个任务的工具，可以指定线程数量。运行步骤如下：
+ * 1. 确定W类和JOB类。也就是，确定worker类和任务类，任务类中实际上包含的应该是任务数据。
+ *   这时候worker类可能还没有定义；
+ * 2. 定义worker类，需要继承WorkerPool::Worder类，重载proc方法，指定处理任务的逻辑。
+ * 3. 创建WorkerPool对象，这时候需要指定Worker类和JOB类。
+ * 4. 调用pool的start方法，开始运行，这时候需要指定worker的数量，也就是线程的数量；
+ * 5. 向pool中push任务；
+ * 6. 从pool中读取任务结果；
+ * 7. 调用pool的stop方法，停止运行；
+ * TODO 确定在哪里使用的，怎么使用的，再回来好好理解这里的代码
+ */
 template<class W, class JOB>
 class WorkerPool{
 	public:
@@ -133,14 +149,21 @@ class WorkerPool{
 				std::string name;
 		};
 	private:
+	    // worker pool的名称还是worker的名称？
 		std::string name;
+		// 任务队列
 		Queue<JOB> jobs;
+		// 任务处理的结果队列
 		SelectableQueue<JOB> results;
 
+        // worker数量
 		int num_workers;
+		// 线程id列表，应该是worker线程的列表的，那意味着每个worker会在独立的线程中运行?
 		std::vector<pthread_t> tids;
+		// 是否已开始运行？
 		bool started;
 
+        // 运行参数
 		struct run_arg{
 			int id;
 			WorkerPool *tp;
@@ -150,6 +173,7 @@ class WorkerPool{
 		WorkerPool(const char *name="");
 		~WorkerPool();
 
+        // 这里返回的是结果队列中用于读取的文件描述符
 		int fd(){
 			return results.fd();
 		}
@@ -285,6 +309,9 @@ int SelectableQueue<T>::push(const T item){
 	return 1;
 }
 
+/**
+ * 从队列中读取数据，并放到data中
+ */
 template <class T>
 int SelectableQueue<T>::pop(T *data){
 	int n, ret = 1;
@@ -323,13 +350,15 @@ int SelectableQueue<T>::pop(T *data){
 }
 
 
-
+// 初始化worker pool，只指定了一个名字
+// 注意模板类的用法，有两个模板类的时候怎么写
 template<class W, class JOB>
 WorkerPool<W, JOB>::WorkerPool(const char *name){
 	this->name = name;
 	this->started = false;
 }
 
+// 析构函数，如果已经开始运行，则停止运行。除此之外每别的需要做的
 template<class W, class JOB>
 WorkerPool<W, JOB>::~WorkerPool(){
 	if(started){
@@ -337,62 +366,85 @@ WorkerPool<W, JOB>::~WorkerPool(){
 	}
 }
 
+// 添加一个任务
 template<class W, class JOB>
 int WorkerPool<W, JOB>::push(JOB job){
 	return this->jobs.push(job);
 }
 
+// 获取任务执行的结果
 template<class W, class JOB>
 int WorkerPool<W, JOB>::pop(JOB *job){
 	return this->results.pop(job);
 }
 
+// 根据指定的参数，开始运行
+// 这个应该在线程中调用？
 template<class W, class JOB>
 void* WorkerPool<W, JOB>::_run_worker(void *arg){
+    // 获取到运行参数
 	struct run_arg *p = (struct run_arg*)arg;
 	int id = p->id;
+	// 获取到运行的worker pool
 	WorkerPool *tp = p->tp;
+	// 为啥删除掉原来的运行参数？
 	delete p;
 
+    // 初始化一个worker？
 	W w(tp->name);
+	// 转化为worker对象。想必W类一定是worker的子类
 	Worker *worker = (Worker *)&w;
+	// 设置id
 	worker->id = id;
+	// 初始化
 	worker->init();
 	while(1){
 		JOB job;
+		// 拿出一个任务
 		if(tp->jobs.pop(&job) == -1){
 			fprintf(stderr, "jobs.pop error\n");
 			::exit(0);
 			break;
 		}
+		// 处理任务
 		worker->proc(&job);
+		// 把任务结果放回去
 		if(tp->results.push(job) == -1){
 			fprintf(stderr, "results.push error\n");
 			::exit(0);
 			break;
 		}
 	}
+	// 运行完了，退出
 	worker->destroy();
+	// 这是什么东西？返回这个有什么用？
 	return (void *)NULL;
 }
 
+// 开始运行工作池
 template<class W, class JOB>
 int WorkerPool<W, JOB>::start(int num_workers){
+    // worker的数量
 	this->num_workers = num_workers;
+	// 如果已经开始，就没必要再重新开始了
 	if(started){
 		return 0;
 	}
 	int err;
 	pthread_t tid;
+	// 循环构建
 	for(int i=0; i<num_workers; i++){
+	    // 初始化运行参数
 		struct run_arg *arg = new run_arg();
 		arg->id = i;
 		arg->tp = this;
 
+        // 起新线程，开始运行
 		err = pthread_create(&tid, NULL, &WorkerPool::_run_worker, arg);
 		if(err != 0){
 			fprintf(stderr, "can't create thread: %s\n", strerror(err));
 		}else{
+		    // 记录线程ID
 			tids.push_back(tid);
 		}
 	}
@@ -406,6 +458,7 @@ int WorkerPool<W, JOB>::stop(){
 	for(int i=0; i<tids.size(); i++){
 #ifdef OS_ANDROID
 #else
+        // 停止线程
 		pthread_cancel(tids[i]);
 #endif
 	}

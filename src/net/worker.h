@@ -11,6 +11,8 @@ found in the LICENSE file.
 #include "proc.h"
 
 // WARN: pipe latency is about 20 us, it is really slow!
+// 这应该是用于处理请求的worker吧，参考util/thread.h中worker的实现
+// 定义worker类
 class ProcWorker : public WorkerPool<ProcWorker, ProcJob>::Worker{
 public:
 	ProcWorker(const std::string &name);
@@ -19,6 +21,7 @@ public:
 	int proc(ProcJob *job);
 };
 
+// 起个别名，方便一点
 typedef WorkerPool<ProcWorker, ProcJob> ProcWorkerPool;
 
 #endif

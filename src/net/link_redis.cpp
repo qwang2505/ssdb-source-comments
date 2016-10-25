@@ -6,6 +6,7 @@ found in the LICENSE file.
 #include "link_redis.h"
 #include <map>
 
+// 返回结果类型
 enum REPLY{
 	REPLY_BULK = 0,
 	REPLY_MULTI_BULK,
@@ -13,6 +14,7 @@ enum REPLY{
 	REPLY_STATUS
 };
 
+// 策略类型，不太明白策略是什么意思
 enum STRATEGY{
 	STRATEGY_AUTO,
 	STRATEGY_PING,
@@ -36,6 +38,11 @@ enum STRATEGY{
 static bool inited = false;
 static std::map<std::string, RedisRequestDesc> cmd_table;
 
+// 这应该是个redis命令和ssdb命令的对应关系表？当然也包括了其他的请求相关信息，
+// 比如返回值结果类型之类的
+//
+// 这个东西基本和头文件里定义的RedisRequestDesc是一样的，不明白为啥要在这重写
+// 一遍，是为了兼容啥东西还是什么别的原因？
 struct RedisCommand_raw
 {
 	int strategy;
@@ -44,6 +51,10 @@ struct RedisCommand_raw
 	int reply_type;
 };
 
+// 定义命令
+//
+// 后面再convert_req中会用这里定义的命令列表去构建cmd_table。两者的内容
+// 都是相同的，不同的是一个是数组，一个是map。为啥要这样？
 static RedisCommand_raw cmds_raw[] = {
 	{STRATEGY_PING, "ping",		"ping",			REPLY_STATUS},
 
@@ -118,9 +129,11 @@ static RedisCommand_raw cmds_raw[] = {
 };
 
 int RedisLink::convert_req(){
+    // 初始化请求表，用cmds_ras更新cmd_table
 	if(!inited){
 		inited = true;
 		
+		// 注意这里的指针操作，用指针遍历数组，值的学习
 		RedisCommand_raw *def = &cmds_raw[0];
 		while(def->redis_cmd != NULL){
 			RedisRequestDesc desc;
@@ -136,16 +149,23 @@ int RedisLink::convert_req(){
 	this->req_desc = NULL;
 	
 	std::map<std::string, RedisRequestDesc>::iterator it;
+	// 在命令表中查看当前命令对应的请求描述对象
 	it = cmd_table.find(cmd);
 	if(it == cmd_table.end()){
+	    // 再cmd_table中没有找到，直接把请求返回了？
 		recv_string.push_back(cmd);
 		for(int i=1; i<recv_bytes.size(); i++){
 			recv_string.push_back(recv_bytes[i].String());
 		}
 		return 0;
 	}
+	// 找到请求描述对象的指针
 	this->req_desc = &(it->second);
 
+    // 下面的处理中，对于ssdb和redis的命令参数定义不同的，从redis命令到ssdb的命令
+    // 进行了转换，并作了默认参数的添加的操作
+    //
+    // 转换后的的命令放入recv_string中，估计后续要把这个当作请求参数来作处理
 	if(this->req_desc->strategy == STRATEGY_HKEYS
 			||  this->req_desc->strategy == STRATEGY_HVALS
 	){
@@ -316,11 +336,16 @@ int RedisLink::convert_req(){
 	return 0;
 }
 
+// 接受请求，请求的数据放到input表示的buffer中，在此函数中将解析buffer中的请求数据，格式化
+// 为Bytes数组（vector），并且在处理过程中，如果请求是redis请求，会将其转换成ssdb请求。
 const std::vector<Bytes>* RedisLink::recv_req(Buffer *input){
+    // 解析请求，将输入数据解析到recv_bytes
 	int ret = this->parse_req(input);
+	// 返回-1，说明解析错误了
 	if(ret == -1){
 		return NULL;
 	}
+	// 如果是空的，是什么情况？协议错误？不是redis协议？这里需要再确定
 	if(recv_bytes.empty()){
 		if(input->space() == 0){
 			input->nice();
@@ -335,13 +360,18 @@ const std::vector<Bytes>* RedisLink::recv_req(Buffer *input){
 		return &recv_bytes;
 	}
 
+    // 获取命令，第1个参数即为命令
 	cmd = recv_bytes[0].String();
+	// 转换成小写
 	strtolower(&cmd);
 	
+	// 清除recv_string
 	recv_string.clear();
 	
+	// 将redis命令请求转换为ssdb命令请求，这一步会将recv_bytes中的命令转换放到recv_string中
 	this->convert_req();
 
+    // 下面又将recv_string中的数据转换到recv_bytes中，并返回
 	// Bytes don't hold memory, so we firstly copy Bytes into string and store
 	// in a vector of string, then create Bytes-es prointing to strings
 	recv_bytes.clear();
@@ -353,13 +383,19 @@ const std::vector<Bytes>* RedisLink::recv_req(Buffer *input){
 	return &recv_bytes;
 }
 
+// 将输出内容resp写到输出缓冲区output中
 int RedisLink::send_resp(Buffer *output, const std::vector<std::string> &resp){
+    // 没有输出
 	if(resp.empty()){
 		return 0;
 	}
+	// 下面各种情况是根据不同的返回结果或者错误消息，在响应缓冲区中添加对应的信息
+	// 请求失败了
 	if(resp[0] == "error" || resp[0] == "fail" || resp[0] == "client_error"){
+	    // 加上错误指示信息
 		output->append("-ERR ");
 		if(resp.size() >= 2){
+		    // 添加错误信息
 			output->append(resp[1]);
 		}
 		output->append("\r\n");
@@ -382,6 +418,7 @@ int RedisLink::send_resp(Buffer *output, const std::vector<std::string> &resp){
 		return 0;
 	}
 	
+	// 这是什么情况？未知的请求？还是非redis协议的请求？
 	if(req_desc == NULL){
 		output->append("+OK\r\n");
 		return 0;
@@ -506,6 +543,7 @@ int RedisLink::send_resp(Buffer *output, const std::vector<std::string> &resp){
 	return 0;
 }
 
+// 解析请求。将input表示的buffer中的数据读取到recv_bytes中
 int RedisLink::parse_req(Buffer *input){
 	recv_bytes.clear();
 
@@ -515,12 +553,15 @@ int RedisLink::parse_req(Buffer *input){
 	
 	//dump(ptr, size);
 	
+	// 第一个字符必须为*
+	// 这是redis的命令的协议？
 	if(ptr[0] != '*'){
 		return -1;
 	}
 
 	int num_args = 0;	
 	while(size > 0){
+        // memchr: 从ptr所指的前size个字符中查找换行符\n
 		char *lf = (char *)memchr(ptr, '\n', size);
 		if(lf == NULL){
 			break;
@@ -557,11 +598,14 @@ int RedisLink::parse_req(Buffer *input){
 
 		num_args --;
 		if(num_args == 0){
+		    // 到这里解析成功，将缓冲区数据删除（这里通过重置指针和改变缓冲区大小）
 			input->decr(parsed);
 			return 1;
 		}
 	}
 	
+	// 到这里的话解析失败，清除已解析数据，返回错误状态码
+	// 这里应该是解析失败吧？否则为什么要清除recv_bytes?
 	recv_bytes.clear();
 	return 0;
 }

@@ -17,6 +17,8 @@ void ProcWorker::init(){
 	log_debug("%s %d init", this->name.c_str(), this->id);
 }
 
+// 处理任务
+// TODO 先看看job类吧
 int ProcWorker::proc(ProcJob *job){
 	const Request *req = job->link->last_recv();
 	Response resp;

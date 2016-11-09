@@ -130,7 +130,7 @@ class SelectableQueue{
  * 5. 向pool中push任务；
  * 6. 从pool中读取任务结果；
  * 7. 调用pool的stop方法，停止运行；
- * TODO 确定在哪里使用的，怎么使用的，再回来好好理解这里的代码
+ * 在NetworkServer中用到，在serve函数中创建工作池
  */
 template<class W, class JOB>
 class WorkerPool{
@@ -406,9 +406,11 @@ void* WorkerPool<W, JOB>::_run_worker(void *arg){
 			::exit(0);
 			break;
 		}
-		// 处理任务
+		// 处理任务，见net/worker.cpp中的实现
+		// 在处理过程中会调用处理函数得到结果，并将结果放到客户端连接的
+		// 输出缓冲区中。
 		worker->proc(&job);
-		// 把任务结果放回去
+		// 将任务放到结果队列，这将触发结果队列的in事件，在NetworkServer的serve函数里会做处理
 		if(tp->results.push(job) == -1){
 			fprintf(stderr, "results.push error\n");
 			::exit(0);

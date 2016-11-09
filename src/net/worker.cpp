@@ -18,7 +18,11 @@ void ProcWorker::init(){
 }
 
 // 处理任务
-// TODO 先看看job类吧
+// 这个函数是在线程中在工作池中被调用，用于处理客户端请求，步骤如下：
+// 1. 从客户端连接中获取请求数据；
+// 2. 通过命令找到处理函数；
+// 3. 传入请求数据，调用处理函数，获取返回结果；
+// 4. 将返回结果发送到输出缓冲区，结束；
 int ProcWorker::proc(ProcJob *job){
 	const Request *req = job->link->last_recv();
 	Response resp;

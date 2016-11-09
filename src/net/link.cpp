@@ -252,6 +252,9 @@ int Link::read(){
 }
 
 // 将输出缓冲区的数据写到socket
+// 注意：在这个函数中，如果输出缓冲区的数据大于网络包的大小、且即将阻塞时，将只写入部分
+// 数据，此时不能把输出缓冲区中所有数据都写完。在NetworkServer中已经处理了此种情况，如果
+// 没有全部写完，将继续监听数据流出事件并继续写直到写完
 int Link::write(){
     // 这里为啥也要grow？这里不会操作output
 	if(output->total() == ZERO_BUFFER_SIZE){

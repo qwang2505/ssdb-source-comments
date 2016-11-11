@@ -18,11 +18,15 @@ found in the LICENSE file.
 #include "net/server.h"
 #include "cluster.h"
 
+// SSDB服务对象
 class SSDBServer
 {
 private:
+    // 用于注册命令处理函数
 	void reg_procs(NetworkServer *net);
 	
+	// 记录KV类型的数据的开始字符串和结束字符串
+	// TODO
 	std::string kv_range_s;
 	std::string kv_range_e;
 	

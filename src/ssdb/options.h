@@ -8,6 +8,8 @@ found in the LICENSE file.
 
 #include "../util/config.h"
 
+// 比较简单，就是记录一些选项。通过Config对象来进行初始化。
+// 记录的是leveldb相关的选项，在开启leveldb的时候会用到
 class Options
 {
 public:

@@ -20,21 +20,26 @@ Binlog::Binlog(uint64_t seq, char type, char cmd, const leveldb::Slice &key){
 }
 
 uint64_t Binlog::seq() const{
+    // buf最开始的位置存储的就是序列号
 	return *((uint64_t *)(buf.data()));
 }
 
 char Binlog::type() const{
+    // 序列号后面存储的是类型
 	return buf[sizeof(uint64_t)];
 }
 
 char Binlog::cmd() const{
+    // 序列号、类型后面存储的是命令
 	return buf[sizeof(uint64_t) + 1];
 }
 
 const Bytes Binlog::key() const{
+    // 再后面存储的是key
 	return Bytes(buf.data() + HEADER_LEN, buf.size() - HEADER_LEN);
 }
 
+// 加载日志
 int Binlog::load(const Bytes &s){
 	if(s.size() < HEADER_LEN){
 		return -1;
@@ -59,15 +64,18 @@ int Binlog::load(const std::string &s){
 	return 0;
 }
 
+// 将操作日志dump成可以读懂的字符串
 std::string Binlog::dumps() const{
 	std::string str;
 	if(buf.size() < HEADER_LEN){
 		return str;
 	}
+	// 放序列号
 	char buf[20];
 	snprintf(buf, sizeof(buf), "%" PRIu64 " ", this->seq());
 	str.append(buf);
 
+    // 放类型
 	switch(this->type()){
 		case BinlogType::NOOP:
 			str.append("noop ");
@@ -82,6 +90,7 @@ std::string Binlog::dumps() const{
 			str.append("copy ");
 			break;
 	}
+	// 放命令
 	switch(this->cmd()){
 		case BinlogCommand::NONE:
 			str.append("none ");
@@ -125,6 +134,7 @@ std::string Binlog::dumps() const{
 			str.append("qset ");
 			break;
 	}
+	// 放key
 	Bytes b = this->key();
 	str.append(hexmem(b.data(), b.size()));
 	return str;
@@ -133,6 +143,11 @@ std::string Binlog::dumps() const{
 
 /* SyncLogQueue */
 
+// 操作日志会被存储到leveldb里，以序列号加上序列号数据类型作为key，value
+// 是操作日志。操作日志队列只维护了一定长度的操作日志，更早的操作日志被删除
+
+// 编码序列号，返回编码后的字符串
+// 返回的字符串中先放了类型，然后是序列号
 static inline std::string encode_seq_key(uint64_t seq){
 	seq = big_endian(seq);
 	std::string ret;
@@ -141,8 +156,10 @@ static inline std::string encode_seq_key(uint64_t seq){
 	return ret;
 }
 
+// 根据leveldb的key解码得到序列号
 static inline uint64_t decode_seq_key(const leveldb::Slice &key){
 	uint64_t seq = 0;
+	// 确保格式是对的
 	if(key.size() == (sizeof(uint64_t) + 1) && key.data()[0] == DataType::SYNCLOG){
 		seq = *((uint64_t *)(key.data() + 1));
 		seq = big_endian(seq);
@@ -150,24 +167,30 @@ static inline uint64_t decode_seq_key(const leveldb::Slice &key){
 	return seq;
 }
 
+// 创建一个操作日志队列
 BinlogQueue::BinlogQueue(leveldb::DB *db, bool enabled){
 	this->db = db;
 	this->min_seq = 0;
 	this->last_seq = 0;
 	this->tran_seq = 0;
+	// 队列空间
 	this->capacity = LOG_QUEUE_SIZE;
 	this->enabled = enabled;
 	
 	Binlog log;
+	// 从leveldb中查找之前最大的序列号
 	if(this->find_last(&log) == 1){
 		this->last_seq = log.seq();
 	}
+	// 超过了队列长度，最小应该是减去队列长度的序列号
 	if(this->last_seq > LOG_QUEUE_SIZE){
 		this->min_seq = this->last_seq - LOG_QUEUE_SIZE;
 	}else{
+	    // 否则，最小序列号是0
 		this->min_seq = 0;
 	}
 	// TODO: use binary search to find out min_seq
+	// 通过leveldb中记录的操作日志更新最小序列号
 	if(this->find_next(this->min_seq, &log) == 1){
 		this->min_seq = log.seq();
 	}
@@ -176,6 +199,7 @@ BinlogQueue::BinlogQueue(leveldb::DB *db, bool enabled){
 	}
 
 	// start cleaning thread
+	// 启动线程进行操作日志的清理
 	if(this->enabled){
 		thread_quit = false;
 		pthread_t tid;
@@ -187,6 +211,7 @@ BinlogQueue::BinlogQueue(leveldb::DB *db, bool enabled){
 	}
 }
 
+// 析构的时候，要记住退出清理操作日志的线程
 BinlogQueue::~BinlogQueue(){
 	if(this->enabled){
 		thread_quit = true;
@@ -200,6 +225,7 @@ BinlogQueue::~BinlogQueue(){
 	db = NULL;
 }
 
+// 操作日志的状态，最大序列号、最小序列号等
 std::string BinlogQueue::stats() const{
 	std::string s;
 	s.append("    capacity : " + str(capacity) + "\n");
@@ -208,31 +234,43 @@ std::string BinlogQueue::stats() const{
 	return s;
 }
 
+// 开始记录操作日志？在事务中用到的
 void BinlogQueue::begin(){
+    // 把事务序列号设置为之前的最大序列号
 	tran_seq = last_seq;
+	// 清理batch操作
 	batch.Clear();
 }
 
+// 会滚，将事务序列号置0
+// 为啥这里不清理batch？
 void BinlogQueue::rollback(){
 	tran_seq = 0;
 }
 
+// 提交操作，也就是执行batch操作
+// 如果写入失败，也没有会滚之类的？
 leveldb::Status BinlogQueue::commit(){
 	leveldb::WriteOptions write_opts;
 	leveldb::Status s = db->Write(write_opts, &batch);
 	if(s.ok()){
+	    // 提交成功，设置新的最大序列号
 		last_seq = tran_seq;
+		// 重置事务序列号
 		tran_seq = 0;
 	}
 	return s;
 }
 
+// 添加一条日志到队列中
 void BinlogQueue::add_log(char type, char cmd, const leveldb::Slice &key){
 	if(!enabled){
 		return;
 	}
+	// 增加事务序列号
 	tran_seq ++;
 	Binlog log(tran_seq, type, cmd, key);
+	// 创建操作，放到batch中
 	batch.Put(encode_seq_key(tran_seq), log.repr());
 }
 
@@ -253,7 +291,9 @@ void BinlogQueue::Put(const leveldb::Slice& key, const leveldb::Slice& value){
 void BinlogQueue::Delete(const leveldb::Slice& key){
 	batch.Delete(key);
 }
-	
+
+// 根据序列号找操作日志。先完全根据序列号查找，如果序列号指定的操作日志
+// 不存在，则找比序列号大的下一条操作日志
 int BinlogQueue::find_next(uint64_t next_seq, Binlog *log) const{
 	if(this->get(next_seq, log) == 1){
 		return 1;
@@ -278,6 +318,7 @@ int BinlogQueue::find_next(uint64_t next_seq, Binlog *log) const{
 	return ret;
 }
 
+// 找到leveldb中存储的最后一条操作日志
 int BinlogQueue::find_last(Binlog *log) const{
 	uint64_t ret = 0;
 	std::string key_str = encode_seq_key(UINT64_MAX);
@@ -306,6 +347,7 @@ int BinlogQueue::find_last(Binlog *log) const{
 	return ret;
 }
 
+// 根据序列号，从leveldb获取操作日志
 int BinlogQueue::get(uint64_t seq, Binlog *log) const{
 	std::string val;
 	leveldb::Status s = db->Get(leveldb::ReadOptions(), encode_seq_key(seq), &val);
@@ -317,6 +359,7 @@ int BinlogQueue::get(uint64_t seq, Binlog *log) const{
 	return 0;
 }
 
+// 根据序列号更新操作日志
 int BinlogQueue::update(uint64_t seq, char type, char cmd, const std::string &key){
 	Binlog log(seq, type, cmd, key);
 	leveldb::Status s = db->Put(leveldb::WriteOptions(), encode_seq_key(seq), log.repr());
@@ -326,6 +369,7 @@ int BinlogQueue::update(uint64_t seq, char type, char cmd, const std::string &ke
 	return -1;
 }
 
+// 根据序列号删除操作日志
 int BinlogQueue::del(uint64_t seq){
 	leveldb::Status s = db->Delete(leveldb::WriteOptions(), encode_seq_key(seq));
 	if(!s.ok()){
@@ -334,10 +378,12 @@ int BinlogQueue::del(uint64_t seq){
 	return 0;
 }
 
+// 这个函数是做什么用的？
 void BinlogQueue::flush(){
 	del_range(this->min_seq, this->last_seq);
 }
 
+// 删除一批操作日志，由start和end指定要删除的操作日志的序列号区间
 int BinlogQueue::del_range(uint64_t start, uint64_t end){
 	while(start <= end){
 		leveldb::WriteBatch batch;
@@ -352,23 +398,29 @@ int BinlogQueue::del_range(uint64_t start, uint64_t end){
 	return 0;
 }
 
+// 用于清理操作日志的线程
 void* BinlogQueue::log_clean_thread_func(void *arg){
 	BinlogQueue *logs = (BinlogQueue *)arg;
 	
+	// 无限循环直到指定退出线程
 	while(!logs->thread_quit){
 		if(!logs->db){
 			break;
 		}
 		usleep(100 * 1000);
+		// 用assert来进行调试的吧，编译的时候会定义NDEBUG宏，所以assert无效
 		assert(logs->last_seq >= logs->min_seq);
 
+        // 操作日志很少，没超过队列长度的1.1倍，不需要清理
 		if(logs->last_seq - logs->min_seq < LOG_QUEUE_SIZE * 1.1){
 			continue;
 		}
 		
+		// 清理操作日志，将队列长度之外的操作日志删除
 		uint64_t start = logs->min_seq;
 		uint64_t end = logs->last_seq - LOG_QUEUE_SIZE;
 		logs->del_range(start, end);
+		// 重置最小序列号
 		logs->min_seq = end + 1;
 		log_info("clean %d logs[%" PRIu64 " ~ %" PRIu64 "], %d left, max: %" PRIu64 "",
 			end-start+1, start, end, logs->last_seq - logs->min_seq + 1, logs->last_seq);

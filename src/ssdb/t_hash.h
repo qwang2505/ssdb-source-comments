@@ -8,6 +8,24 @@ found in the LICENSE file.
 
 #include "ssdb_impl.h"
 
+/*
+ * hashmap的数据是如下结构的：
+ * name1: 
+ *   field1: value1
+ *   field2: value2
+ * name2:
+ *   field1: value1
+ *   field2: value2
+ *   ...
+ *
+ * 在SSDB中存储hashmap的时候，主要包括两部分：
+ * 1. 存储hashmap的数据，在leveldb中，以name+field作为leveldb的key，value作为leveldb的value存储；
+ * 2. 存储hashmap的大小，以name作为hashmap的key，value是hashmap中field的数量。
+ *
+ * 下面的四个函数，分别用于编码和解码上述两种存储方式的key
+ * 因此，hsize是个O(1)的操作。
+ */
+
 inline static
 std::string encode_hsize_key(const Bytes &name){
 	std::string buf;

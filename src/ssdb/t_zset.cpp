@@ -6,6 +6,7 @@ found in the LICENSE file.
 #include <limits.h>
 #include "t_zset.h"
 
+// 分数的最大和最小范围
 static const char *SSDB_SCORE_MIN		= "-9223372036854775808";
 static const char *SSDB_SCORE_MAX		= "+9223372036854775807";
 
@@ -17,15 +18,19 @@ static int incr_zsize(SSDBImpl *ssdb, const Bytes &name, int64_t incr);
  * @return -1: error, 0: item updated, 1: new item inserted
  */
 int SSDBImpl::zset(const Bytes &name, const Bytes &key, const Bytes &score, char log_type){
+    // 开始事务
 	Transaction trans(binlogs);
 
+    // 先保存数据
 	int ret = zset_one(this, name, key, score, log_type);
 	if(ret >= 0){
 		if(ret > 0){
+		    // 如果新增加了数据，修改数据数量的记录
 			if(incr_zsize(this, name, ret) == -1){
 				return -1;
 			}
 		}
+		// 提交事务
 		leveldb::Status s = binlogs->commit();
 		if(!s.ok()){
 			log_error("zset error: %s", s.ToString().c_str());
@@ -35,6 +40,7 @@ int SSDBImpl::zset(const Bytes &name, const Bytes &key, const Bytes &score, char
 	return ret;
 }
 
+// 删除一条记录。这些操作均大同小异
 int SSDBImpl::zdel(const Bytes &name, const Bytes &key, char log_type){
 	Transaction trans(binlogs);
 
@@ -54,7 +60,9 @@ int SSDBImpl::zdel(const Bytes &name, const Bytes &key, char log_type){
 	return ret;
 }
 
+// 增加value的值
 int SSDBImpl::zincr(const Bytes &name, const Bytes &key, int64_t by, int64_t *new_val, char log_type){
+    // 开始事务
 	Transaction trans(binlogs);
 
 	std::string old;
@@ -86,6 +94,7 @@ int SSDBImpl::zincr(const Bytes &name, const Bytes &key, int64_t by, int64_t *ne
 	return 1;
 }
 
+// 返回zset中内容的数量
 int64_t SSDBImpl::zsize(const Bytes &name){
 	std::string size_key = encode_zsize_key(name);
 	std::string val;
@@ -105,6 +114,7 @@ int64_t SSDBImpl::zsize(const Bytes &name){
 	}
 }
 
+// 根据name和key获取分数
 int SSDBImpl::zget(const Bytes &name, const Bytes &key, std::string *score){
 	std::string buf = encode_zset_key(name, key);
 	leveldb::Status s = db->Get(leveldb::ReadOptions(), buf, score);
@@ -118,6 +128,7 @@ int SSDBImpl::zget(const Bytes &name, const Bytes &key, std::string *score){
 	return 1;
 }
 
+// 获取迭代器，根据分数和指定的key遍历数据
 static ZIterator* ziterator(
 	SSDBImpl *ssdb,
 	const Bytes &name, const Bytes &key_start,
@@ -126,6 +137,7 @@ static ZIterator* ziterator(
 {
 	if(direction == Iterator::FORWARD){
 		std::string start, end;
+		// 根据分数的key来遍历
 		if(score_start.empty()){
 			start = encode_zscore_key(name, key_start, SSDB_SCORE_MIN);
 		}else{
@@ -157,7 +169,9 @@ static ZIterator* ziterator(
 	}
 }
 
+// 获取指定的key在整个zset中的排序序号
 int64_t SSDBImpl::zrank(const Bytes &name, const Bytes &key){
+    // 获取迭代器，从最开始的位置开始遍历
 	ZIterator *it = ziterator(this, name, "", "", "", INT_MAX, Iterator::FORWARD);
 	uint64_t ret = 0;
 	while(true){
@@ -165,15 +179,18 @@ int64_t SSDBImpl::zrank(const Bytes &name, const Bytes &key){
 			ret = -1;
 			break;
 		}
+		// 找到key
 		if(key == it->key){
 			break;
 		}
 		ret ++;
 	}
 	delete it;
+	// 返回序号
 	return ret;
 }
 
+// 获取指定key在整个zset中的反向序号
 int64_t SSDBImpl::zrrank(const Bytes &name, const Bytes &key){
 	ZIterator *it = ziterator(this, name, "", "", "", INT_MAX, Iterator::BACKWARD);
 	uint64_t ret = 0;
@@ -191,6 +208,7 @@ int64_t SSDBImpl::zrrank(const Bytes &name, const Bytes &key){
 	return ret;
 }
 
+// 获取zset中从指定位置开始的迭代器
 ZIterator* SSDBImpl::zrange(const Bytes &name, uint64_t offset, uint64_t limit){
 	if(offset + limit > limit){
 		limit = offset + limit;
@@ -200,6 +218,7 @@ ZIterator* SSDBImpl::zrange(const Bytes &name, uint64_t offset, uint64_t limit){
 	return it;
 }
 
+// 获取zset中从指定位置开始的迭代器，反向
 ZIterator* SSDBImpl::zrrange(const Bytes &name, uint64_t offset, uint64_t limit){
 	if(offset + limit > limit){
 		limit = offset + limit;
@@ -209,6 +228,7 @@ ZIterator* SSDBImpl::zrrange(const Bytes &name, uint64_t offset, uint64_t limit)
 	return it;
 }
 
+// 遍历zset，可以指定开始的key和分数
 ZIterator* SSDBImpl::zscan(const Bytes &name, const Bytes &key,
 		const Bytes &score_start, const Bytes &score_end, uint64_t limit)
 {
@@ -222,6 +242,7 @@ ZIterator* SSDBImpl::zscan(const Bytes &name, const Bytes &key,
 	return ziterator(this, name, key, score, score_end, limit, Iterator::FORWARD);
 }
 
+// 反向遍历
 ZIterator* SSDBImpl::zrscan(const Bytes &name, const Bytes &key,
 		const Bytes &score_start, const Bytes &score_end, uint64_t limit)
 {
@@ -235,6 +256,7 @@ ZIterator* SSDBImpl::zrscan(const Bytes &name, const Bytes &key,
 	return ziterator(this, name, key, score, score_end, limit, Iterator::BACKWARD);
 }
 
+// 从迭代器获取所有zset的name
 static void get_znames(Iterator *it, std::vector<std::string> *list){
 	while(it->next()){
 		Bytes ks = it->key();
@@ -250,6 +272,7 @@ static void get_znames(Iterator *it, std::vector<std::string> *list){
 	}
 }
 
+// 指定name的开始和结束字符串，获取zset中的所有name
 int SSDBImpl::zlist(const Bytes &name_s, const Bytes &name_e, uint64_t limit,
 		std::vector<std::string> *list){
 	std::string start;
@@ -266,6 +289,7 @@ int SSDBImpl::zlist(const Bytes &name_s, const Bytes &name_e, uint64_t limit,
 	return 0;
 }
 
+// 获取倒序的zset中的所有name
 int SSDBImpl::zrlist(const Bytes &name_s, const Bytes &name_e, uint64_t limit,
 		std::vector<std::string> *list){
 	std::string start;
@@ -285,12 +309,15 @@ int SSDBImpl::zrlist(const Bytes &name_s, const Bytes &name_e, uint64_t limit,
 	return 0;
 }
 
+// 确保score的值在int64的范围内？
 static std::string filter_score(const Bytes &score){
 	int64_t s = score.Int64();
 	return str(s);
 }
 
 // returns the number of newly added items
+// 添加或修改zset数据。在这里添加的时候，会向数据库中写入两条记录，一条是按name+key排序的数据，一条是按
+// name+score+key排序的数据。zset大小相关的数据在这里不会保存
 static int zset_one(SSDBImpl *ssdb, const Bytes &name, const Bytes &key, const Bytes &score, char log_type){
 	if(name.empty() || key.empty()){
 		log_error("empty name or key!");
@@ -305,12 +332,16 @@ static int zset_one(SSDBImpl *ssdb, const Bytes &name, const Bytes &key, const B
 		log_error("key too long!");
 		return -1;
 	}
+	// 确保score的值在有效分数范围之内
 	std::string new_score = filter_score(score);
 	std::string old_score;
 	int found = ssdb->zget(name, key, &old_score);
+	// 不存在或者分数不一致
 	if(found == 0 || old_score != new_score){
+	    // 阿，一共三个key
 		std::string k0, k1, k2;
 
+        // 更新score的值，把原来分数的操作日志删除
 		if(found){
 			// delete zscore key
 			k1 = encode_zscore_key(name, key, old_score);
@@ -318,10 +349,13 @@ static int zset_one(SSDBImpl *ssdb, const Bytes &name, const Bytes &key, const B
 		}
 
 		// add zscore key
+		// 这里会用name+score+key作为leveldb的key，value空保存一条
+		// 数据，用于根据分数排序等场景
 		k2 = encode_zscore_key(name, key, new_score);
 		ssdb->binlogs->Put(k2, "");
 
 		// update zset
+		// 保存数据，以name+key为key来保存
 		k0 = encode_zset_key(name, key);
 		ssdb->binlogs->Put(k0, new_score);
 		ssdb->binlogs->add_log(log_type, BinlogCommand::ZSET, k0);
@@ -331,6 +365,7 @@ static int zset_one(SSDBImpl *ssdb, const Bytes &name, const Bytes &key, const B
 	return 0;
 }
 
+// 删除一条数据
 static int zdel_one(SSDBImpl *ssdb, const Bytes &name, const Bytes &key, char log_type){
 	if(name.size() > SSDB_KEY_LEN_MAX ){
 		log_error("name too long!");
@@ -347,11 +382,13 @@ static int zdel_one(SSDBImpl *ssdb, const Bytes &name, const Bytes &key, char lo
 	}
 
 	std::string k0, k1;
+	// 删除分数key
 	// delete zscore key
 	k1 = encode_zscore_key(name, key, old_score);
 	ssdb->binlogs->Delete(k1);
 
 	// delete zset
+	// 删除数据记录
 	k0 = encode_zset_key(name, key);
 	ssdb->binlogs->Delete(k0);
 	ssdb->binlogs->add_log(log_type, BinlogCommand::ZDEL, k0);
@@ -359,13 +396,17 @@ static int zdel_one(SSDBImpl *ssdb, const Bytes &name, const Bytes &key, char lo
 	return 1;
 }
 
+// 增加zset的项目的数量
 static int incr_zsize(SSDBImpl *ssdb, const Bytes &name, int64_t incr){
 	int64_t size = ssdb->zsize(name);
 	size += incr;
+	// 获取到size的key
 	std::string size_key = encode_zsize_key(name);
 	if(size == 0){
+	    // 增加计数后将数量为0，将记录删除
 		ssdb->binlogs->Delete(size_key);
 	}else{
+	    // 保存数量
 		ssdb->binlogs->Put(size_key, leveldb::Slice((char *)&size, sizeof(int64_t)));
 	}
 	return 0;

@@ -16,9 +16,11 @@ found in the LICENSE file.
 #include "../util/bytes.h"
 
 
+// 标示一条操作日志，其中包括操作序列号、操作类型、操作命令、操作的数据的key
 class Binlog{
 private:
 	std::string buf;
+	// 头部的长度，包括一个uint64_t的序列号，一个字节标示类型，一个字节标示命令
 	static const unsigned int HEADER_LEN = sizeof(uint64_t) + 2;
 public:
 	Binlog(){}
@@ -46,11 +48,19 @@ public:
 };
 
 // circular queue
+// 操作日志队列，是个环形队列
+// 主要用于进行事务的控制，在事务开始后会加锁，将操作缓存起来，然后
+// 提交的时候再统一进行写入数据库的操作。每条操作会产生两个写入：一个
+// 是真正的数据，一个是操作日志
 class BinlogQueue{
 private:
+    // NDEBUG宏是用于控制assert的行为，如果定义，则assert不会起作用
+    // 编译的时候会定义
 #ifdef NDEBUG
+    // 如果是debug，多一点
 	static const int LOG_QUEUE_SIZE  = 10 * 1000 * 1000;
 #else
+    // 队列长度是10000条
 	static const int LOG_QUEUE_SIZE  = 10000;
 #endif
 	leveldb::DB *db;
@@ -69,6 +79,7 @@ private:
 	void merge();
 	bool enabled;
 public:
+    // 线程锁
 	Mutex mutex;
 
 	BinlogQueue(leveldb::DB *db, bool enabled=true);
@@ -99,13 +110,16 @@ public:
 	std::string stats() const;
 };
 
+// 事务支持。使用操作日志队列来存储事务中的操作
 class Transaction{
 private:
 	BinlogQueue *logs;
 public:
 	Transaction(BinlogQueue *logs){
 		this->logs = logs;
+		// 加锁
 		logs->mutex.lock();
+		// 开始事务
 		logs->begin();
 	}
 	

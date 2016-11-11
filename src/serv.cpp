@@ -10,6 +10,7 @@ found in the LICENSE file.
 #include "net/proc.h"
 #include "net/server.h"
 
+// 声明命令处理函数的宏，宏在net/proc.h中定义
 DEF_PROC(get);
 DEF_PROC(set);
 DEF_PROC(setx);
@@ -129,8 +130,11 @@ DEF_PROC(cluster_set_kv_status);
 DEF_PROC(cluster_migrate_kv_data);
 
 
+// 用于注册命令处理汉书的宏
 #define REG_PROC(c, f)     net->proc_map.set_proc(#c, f, proc_##c)
 
+// 向网络服务器的命令影射map中注册命令处理汉书，注册时要指定命令类型，
+// 读命令/写命令/线程中运行的命令/后台命令等。
 void SSDBServer::reg_procs(NetworkServer *net){
 	REG_PROC(get, "r");
 	REG_PROC(set, "wt");

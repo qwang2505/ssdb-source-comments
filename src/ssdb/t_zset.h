@@ -11,6 +11,13 @@ found in the LICENSE file.
 #define encode_score(s) big_endian((uint64_t)(s))
 #define decode_score(s) big_endian((uint64_t)(s))
 
+/**
+ * 为了支持zset的实现，在leveldb中共需要保存三种类型的数据：
+ * 1. 以name+key作为leveldb的key，score作为leveldb的value；
+ * 2. 以name+score+key作为leveldb的key，leveldb的value为空。存储这个数据是为了方便的对zset进行排序相关操作。
+ * 3. 以name作为leveldb的key，leveldb的value存储此zset的大小
+ */
+
 static inline
 std::string encode_zsize_key(const Bytes &name){
 	std::string buf;

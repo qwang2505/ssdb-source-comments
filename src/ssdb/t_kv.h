@@ -8,6 +8,13 @@ found in the LICENSE file.
 
 #include "ssdb_impl.h"
 
+// 编码和解码KV数据结构在leveldb中存储的key
+// 在leveldb中存储KV数据的时候，在数据的key的前面加了一个k，标示
+// 数据是KV类型的
+//
+// SSDB中KV的数据直接存储在leveldb中，只是在key的前面加了k标示数据类型，
+// 没有其他区别了
+
 static inline
 std::string encode_kv_key(const Bytes &key){
 	std::string buf;

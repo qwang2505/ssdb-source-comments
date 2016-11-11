@@ -19,14 +19,17 @@ found in the LICENSE file.
 #include "t_zset.h"
 #include "t_queue.h"
 
+// 将ssdb中定义的字符串Bytes转换为leveldb要求的字符串格式slice
 inline
 static leveldb::Slice slice(const Bytes &b){
 	return leveldb::Slice(b.data(), b.size());
 }
 
+// 继承虚基类，派生实现类
 class SSDBImpl : public SSDB
 {
 private:
+    // 为啥生命为友原类？不是父类吗？TODO
 	friend class SSDB;
 	leveldb::DB* db;
 	leveldb::Options options;

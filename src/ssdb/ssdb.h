@@ -15,10 +15,12 @@ found in the LICENSE file.
 class Bytes;
 class Config;
 
+// SSDB的接口。这里面相关的都是数据库操作相关的，封装成统一的接口，以便外部方便使用。
 class SSDB{
 public:
 	SSDB(){}
 	virtual ~SSDB(){};
+	// 打开SSDB，返回一个对象指针
 	static SSDB* open(const Options &opt, const std::string &base_dir);
 
 	// return (start, end], not include start
@@ -34,6 +36,7 @@ public:
 	/* raw operates */
 
 	// repl: whether to sync this operation to slaves
+	// raw operation表示的应该是原是的leveldb操作
 	virtual int raw_set(const Bytes &key, const Bytes &val) = 0;
 	virtual int raw_del(const Bytes &key) = 0;
 	virtual int raw_get(const Bytes &key, std::string *val) = 0;

@@ -7,6 +7,7 @@ found in the LICENSE file.
 #define SSDB_CONST_H_
 
 static const int SSDB_SCORE_WIDTH		= 9;
+// ssdb中key的最长长度
 static const int SSDB_KEY_LEN_MAX		= 255;
 
 class DataType{

@@ -62,6 +62,7 @@ void MyApplication::run(){
 
 	SSDB *data_db = NULL;
 	SSDB *meta_db = NULL;
+	// 打开数据库，后面可以通过指针开始操作向leveldb中存储数据了
 	data_db = SSDB::open(option, data_db_dir);
 	if(!data_db){
 		log_fatal("could not open data db: %s", data_db_dir.c_str());
@@ -69,6 +70,7 @@ void MyApplication::run(){
 		exit(1);
 	}
 
+    // 打开meta数据库
 	meta_db = SSDB::open(Options(), meta_db_dir);
 	if(!meta_db){
 		log_fatal("could not open meta db: %s", meta_db_dir.c_str());
@@ -78,13 +80,17 @@ void MyApplication::run(){
 
 	NetworkServer *net = NULL;	
 	SSDBServer *server;
+	// 使用配置初始化网络服务器
 	net = NetworkServer::init(*conf);
+	// 创建ssdb服务对象
 	server = new SSDBServer(data_db, meta_db, *conf, net);
 	
 	log_info("pidfile: %s, pid: %d", app_args.pidfile.c_str(), (int)getpid());
 	log_info("ssdb server started.");
+	// 开始接受网络请求
 	net->serve();
 	
+	// 释放资源
 	delete net;
 	delete server;
 	delete meta_db;

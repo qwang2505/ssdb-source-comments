@@ -10,8 +10,11 @@ found in the LICENSE file.
 #include "ssdb/ssdb.h"
 #include "net/link.h"
 
+// 貌似是用来做对整个数据库的dump，待查看
+// 在命令文档中没有提到dump命令，但是在命令处理中确实有这个命令，可能是文档删掉了？
 class BackendDump{
 private:
+    // 在线程中运行dump时的运行参数
 	struct run_arg{
 		const Link *link;
 		const BackendDump *backend;

@@ -12,12 +12,15 @@ found in the LICENSE file.
 #include "util/strings.h"
 #include "util/thread.h"
 
+// 表示一个KV区间，在集群配置中用到，用于在不同的服务器上存储
+// 不同区间的数据
 class KeyRange{
 public:
 	std::string begin;
 	std::string end;
 	KeyRange(){
 	}
+	// 使用key开始/结束字符串初始化KV区间
 	KeyRange(const std::string &begin, const std::string &end){
 		this->begin = begin;
 		this->end = end;
@@ -25,6 +28,7 @@ public:
 	std::string str() const{
 		return "(\"" + str_escape(begin) + "\" - \"" + str_escape(end) + "\"]";
 	}
+	// 判断两个区间是否有重叠
 	bool overlapped(const KeyRange &range) const{
 		if(!this->begin.empty() && !range.end.empty() && this->begin >= range.end){
 			return false;
@@ -34,11 +38,14 @@ public:
 		}
 		return true;
 	}
+	// 判断区间是否为空
 	bool empty() const{
 		return begin == "" && end == "";
 	}
 };
 
+// 表示集群中的一个节点，包含节点基本信息，比如ID，IP，端口等，以及节点中存储的
+// 数据的Key的区间。
 class Node{
 public:
 	const static int INIT    = 0;
@@ -64,6 +71,7 @@ public:
 class SSDB;
 class ClusterStore;
 
+// SSDB集群，进行集群的管理，包括添加节点、获取节点状态、在集群中迁移数据等等。
 class Cluster
 {
 public:

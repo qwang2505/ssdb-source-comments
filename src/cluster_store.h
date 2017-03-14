@@ -10,6 +10,7 @@ found in the LICENSE file.
 
 class SSDB;
 
+// 存储在SSDB中的关于集群的信息，包括读取集群列表、添加节点等操作。
 class ClusterStore
 {
 public:

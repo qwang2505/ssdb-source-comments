@@ -26,7 +26,7 @@ private:
 	void reg_procs(NetworkServer *net);
 	
 	// 记录KV类型的数据的开始字符串和结束字符串
-	// TODO
+	// 集群中各服务器存储一个区间的key value，并且可能在不同的服务器之间进行迁移。
 	std::string kv_range_s;
 	std::string kv_range_e;
 	

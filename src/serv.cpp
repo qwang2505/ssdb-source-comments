@@ -264,22 +264,32 @@ SSDBServer::SSDBServer(SSDB *ssdb, SSDB *meta, const Config &conf, NetworkServer
 	this->ssdb = (SSDBImpl *)ssdb;
 	this->meta = meta;
 
+    // 将网络服务器的data指针指向ssdb服务对象，这样在处理函数中就可以通过网络服务器
+    // 获取到SSDB服务对象，从而实现其他操作
 	net->data = this;
+	// 注册处理函数，会将各个命令的处理函数注册到网络服务器
 	this->reg_procs(net);
 
+    // 同步速度？看看在那里用到吧
 	int sync_speed = conf.get_num("replication.sync_speed");
 
+    // 用于进行后台dump的对象
 	backend_dump = new BackendDump(this->ssdb);
+	// 用于进行后台同步的对象
 	backend_sync = new BackendSync(this->ssdb, sync_speed);
+	// 用于判断命令是否超时的？
 	expiration = new ExpirationHandler(this->ssdb);
 	
+	// 集群对象，一启动就是集群模式？
 	cluster = new Cluster(this->ssdb);
 	if(cluster->init() == -1){
 		log_fatal("cluster init failed!");
 		exit(1);
 	}
 
+    // 配置主从同步
 	{ // slaves
+	    // 读取配置
 		const Config *repl_conf = conf.get("replication");
 		if(repl_conf != NULL){
 			std::vector<Config *> children = repl_conf->children;
@@ -295,6 +305,7 @@ SSDBServer::SSDBServer(SSDB *ssdb, SSDB *meta, const Config &conf, NetworkServer
 				}
 				bool is_mirror = false;
 				std::string type = c->get_str("type");
+				// 两种类型有啥区别与联系？
 				if(type == "mirror"){
 					is_mirror = true;
 				}else{
@@ -305,11 +316,14 @@ SSDBServer::SSDBServer(SSDB *ssdb, SSDB *meta, const Config &conf, NetworkServer
 				std::string id = c->get_str("id");
 				
 				log_info("slaveof: %s:%d, type: %s", ip.c_str(), port, type.c_str());
+				// 新建一个slave对象。这里很有意思，slaveof的意思指定的应该是master吧，为啥
+				// 要叫slave？
 				Slave *slave = new Slave(ssdb, meta, ip.c_str(), port, is_mirror);
 				if(!id.empty()){
 					slave->set_id(id);
 				}
 				slave->auth = c->get_str("auth");
+				// 开始slave之后，将在新的线程重接受master的操作日志并同步到当前slave数据库中
 				slave->start();
 				slaves.push_back(slave);
 			}
@@ -330,6 +344,7 @@ SSDBServer::SSDBServer(SSDB *ssdb, SSDB *meta, const Config &conf, NetworkServer
 
 SSDBServer::~SSDBServer(){
 	std::vector<Slave *>::iterator it;
+	// 销毁所有的slave
 	for(it = slaves.begin(); it != slaves.end(); it++){
 		Slave *slave = *it;
 		slave->stop();
@@ -413,6 +428,7 @@ int proc_compact(NetworkServer *net, Link *link, const Request &req, Response *r
 	return 0;
 }
 
+// ignore_key_range的处理函数。这个函数会给客户端连接设置一个属性，在哪里用到还不知道
 int proc_ignore_key_range(NetworkServer *net, Link *link, const Request &req, Response *resp){
 	link->ignore_key_range = true;
 	resp->push_back("ok");

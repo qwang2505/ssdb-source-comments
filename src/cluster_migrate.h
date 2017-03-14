@@ -14,6 +14,7 @@ namespace ssdb{
 	class Client;
 };
 
+// 用于进行集群中节点之间的数据迁移
 class ClusterMigrate
 {
 public:

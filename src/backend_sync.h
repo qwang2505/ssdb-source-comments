@@ -16,6 +16,7 @@ found in the LICENSE file.
 #include "net/link.h"
 #include "util/thread.h"
 
+// 管理主从同步
 class BackendSync{
 private:
 	struct Client;
@@ -23,13 +24,17 @@ private:
 	std::vector<Client *> clients;
 	std::vector<Client *> clients_tmp;
 
+    // 线程运行参数
 	struct run_arg{
 		const Link *link;
 		const BackendSync *backend;
 	};
+	// 是否退出线程运行
 	volatile bool thread_quit;
+	// 线程函数
 	static void* _run_thread(void *arg);
 	Mutex mutex;
+	// 线程和client的map
 	std::map<pthread_t, Client *> workers;
 	SSDBImpl *ssdb;
 	int sync_speed;
@@ -41,6 +46,7 @@ public:
 	std::vector<std::string> stats();
 };
 
+// 定义主从同步的客户端
 struct BackendSync::Client{
 	static const int INIT = 0;
 	static const int OUT_OF_SYNC = 1;

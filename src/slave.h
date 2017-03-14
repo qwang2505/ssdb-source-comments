@@ -14,6 +14,7 @@ found in the LICENSE file.
 #include "ssdb/binlog.h"
 #include "net/link.h"
 
+// 表示一个slave，管理与master的通信、进行数据同步等。会开一个线程来负责与master的同步
 class Slave{
 private:
 	uint64_t last_seq;
@@ -44,6 +45,7 @@ private:
 	void save_status();
 
 	volatile bool thread_quit;
+	// 运行的线程的id
 	pthread_t run_thread_tid;
 	static void* _run_thread(void *arg);
 		
@@ -54,6 +56,7 @@ private:
 
 	unsigned int connect_retry;
 	int connect();
+	// 是否与master连接
 	bool connected(){
 		return link != NULL;
 	}
